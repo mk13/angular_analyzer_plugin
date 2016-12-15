@@ -1451,6 +1451,53 @@ class TemplateResolver {
   static bool _tokenMatchesIdentifier(Token token) =>
       token.type == TokenType.IDENTIFIER ||
       _tokenMatchesBuiltInIdentifier(token);
+
+  static void _filterPipesFromTokenChain(Token token) {
+    int openingParensFound = 0;
+    bool pipeSeen = false;
+    bool seekingOpenParens = true;
+    Token lastValid = null;
+    Token finalEofToken = null;
+
+    while (token.type != TokenType.EOF){
+      if (token.type == TokenType.OPEN_PAREN){
+        openingParensFound += 1;
+        lastValid = token;
+        token = token.next;
+        continue;
+      }else{
+        seekingOpenParens = false;
+      }
+      if (!pipeSeen && token.type == TokenType.BAR){
+        lastValid = token.previous;
+        pipeSeen = true;
+      }
+      token = token.next;
+    }
+
+    if (pipeSeen){
+      if (openingParensFound == 0){
+        lastValid.setNext(token);
+      }
+      else{
+        List<Token> toAdd = [];
+        toAdd.add(token);
+        token = token.previous;
+        while(token != lastValid && openingParensFound > 0){
+          if (token.type == TokenType.CLOSE_PAREN){
+            toAdd.add(token);
+            openingParensFound--;
+          }
+        }
+        while(toAdd.isNotEmpty){
+          Token next = toAdd.removeLast();
+          lastValid.setNext(next);
+          lastValid = next;
+        }
+      }
+
+    }
+  }
 }
 
 /**

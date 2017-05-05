@@ -12,6 +12,7 @@ import 'package:analysis_server/src/protocol_server.dart' as protocol;
 import 'package:analyzer/error/error.dart';
 import 'package:analyzer/src/dart/analysis/driver.dart';
 import 'package:analyzer/src/summary/api_signature.dart';
+import 'package:analyzer/src/generated/resolver.dart' show TypeProvider;
 import 'package:angular_analyzer_plugin/tasks.dart';
 import 'package:angular_analyzer_plugin/src/file_tracker.dart';
 import 'package:angular_analyzer_plugin/src/from_file_prefixed_error.dart';
@@ -75,6 +76,23 @@ class AngularDriver
 
   bool _ownsFile(String path) {
     return path.endsWith('.dart') || path.endsWith('.html');
+  }
+
+  /**
+   * This is implemented in order to satisfy the [AnalysisDriverGeneric]
+   * interface. Ideally, we analyze these files first. For the moment, this lets
+   * the analysis server team add this method to the interface without breaking
+   * any code.
+   */
+  void set priorityFiles(List<String> priorityPaths) {
+    // TODO analyze these files first
+  }
+
+  /**
+    * Notify the driver that the client is going to stop using it.
+    */
+  void dispose() {
+    // TODO anything we need to do here?
   }
 
   void addFile(String path) {
@@ -248,6 +266,10 @@ class AngularDriver
     if (standardAngular == null) {
       final source =
           _sourceFactory.resolveUri(null, "package:angular2/angular2.dart");
+
+      if (source == null) {
+        return standardAngular;
+      }
 
       final result = await dartDriver.getResult(source.fullName);
 

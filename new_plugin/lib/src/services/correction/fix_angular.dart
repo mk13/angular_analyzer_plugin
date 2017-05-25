@@ -11,6 +11,9 @@ import 'package:analyzer/src/generated/source.dart';
 import 'package:analyzer_plugin/protocol/protocol_common.dart'
     hide AnalysisError, Element, ElementKind;
 
+import 'package:analyzer_plugin/utilities/change_builder/change_builder_core.dart';
+import 'package:analyzer_plugin/src/utilities/change_builder/change_builder_core.dart';
+
 class AngularFixContributor {
   Future<List<Fix>> computeFixes(AngularFixContext context) async {
     final processor = new AngularFixProcessor(context);
@@ -46,6 +49,7 @@ class AngularFixProcessor {
   int errorEnd;
   SourceRange errorRange;
 
+  final changeBuilder = new ChangeBuilderImpl();
   final List<Fix> fixes = <Fix>[];
 
   AngularFixProcessor(AngularFixContext ngContext) {

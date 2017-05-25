@@ -122,6 +122,12 @@ class AngularAnalysisPlugin extends ServerPlugin {
   }
 
   @override
+  Future<plugin.EditGetFixesResult> handleEditGetFixes(
+      plugin.EditGetFixesParams parameters) async {
+    return new plugin.EditGetFixesResult(const <plugin.AnalysisErrorFixes>[]);
+  }
+
+  @override
   Future<plugin.CompletionGetSuggestionsResult> handleCompletionGetSuggestions(
       plugin.CompletionGetSuggestionsParams parameters) async {
     final filePath = parameters.file;

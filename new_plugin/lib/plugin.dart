@@ -10,6 +10,7 @@ import 'package:analyzer/context/context_root.dart';
 import 'package:analyzer/file_system/file_system.dart';
 import 'package:analyzer/src/context/builder.dart';
 import 'package:analyzer/src/dart/analysis/driver.dart';
+import 'package:analyzer/src/generated/source.dart';
 import 'package:front_end/src/base/performace_logger.dart';
 import 'package:analyzer_plugin/plugin/plugin.dart';
 import 'package:analyzer_plugin/protocol/protocol_common.dart' as plugin;
@@ -17,8 +18,11 @@ import 'package:analyzer_plugin/protocol/protocol_constants.dart' as plugin;
 import 'package:analyzer_plugin/protocol/protocol_generated.dart' as plugin;
 import 'package:angular_analysis_plugin/src/notification_manager.dart';
 import 'package:angular_analyzer_plugin/src/angular_driver.dart';
+import 'package:angular_analysis_plugin/src/services/correction/fix_angular.dart';
 import 'package:angular_analyzer_server_plugin/src/completion.dart';
 import 'package:analyzer_plugin/protocol/protocol.dart' as plugin;
+import 'package:angular_ast/angular_ast.dart';
+import 'package:angular_analyzer_plugin/tasks.dart';
 
 class AngularAnalysisPlugin extends ServerPlugin {
   AngularAnalysisPlugin(ResourceProvider provider) : super(provider);
@@ -123,21 +127,54 @@ class AngularAnalysisPlugin extends ServerPlugin {
 
   @override
   Future<plugin.EditGetFixesResult> handleEditGetFixes(
-      plugin.EditGetFixesParams parameters) async {
-    return new plugin.EditGetFixesResult(const <plugin.AnalysisErrorFixes>[]);
+      plugin.EditGetFixesParams params) async {
+    DirectivesResult result;
+    LineInfo lineInfo;
+    final file = params.file;
+    final offset = params.offset;
+
+    // List of fixes for errors that the plugin will send.
+    final errorFixesList = <plugin.AnalysisErrorFixes>[];
+
+    final driver = _getDriverForFile(file);
+    final templates = await driver.getTemplatesForFile(file);
+    if (file.endsWith('.dart')) {
+      result = await driver.resolveDart(file);
+    } else if (file.endsWith('.html')) {
+      result = await driver.resolveHtml(file);
+    }
+
+    if (result != null && templates != null) {
+      // Find the corresponding template
+      for (final template in templates) {
+        if (template.view.templateUriSource.toString() == file) {
+          final lineInfo =
+              new LineInfo.fromContent(driver.getFileContent(file));
+          final requestLine = lineInfo.getLocation(offset).lineNumber;
+          final errors = result.errors
+              .where((e) =>
+                  (e.errorCode is NgParserWarningCode) ||
+                  (e.errorCode is AngularWarningCode))
+              .toList();
+          for (final error in errors) {
+            final errorLine = lineInfo.getLocation(error.offset).lineNumber;
+            if (errorLine == requestLine) {
+              final context = new AngularFixContext(driver, template, error);
+              final fixes =
+                  await new AngularFixContributor().computeFixes(context);
+            }
+          }
+        }
+      }
+    }
+    return new plugin.EditGetFixesResult(errorFixesList);
   }
 
   @override
   Future<plugin.CompletionGetSuggestionsResult> handleCompletionGetSuggestions(
       plugin.CompletionGetSuggestionsParams parameters) async {
     final filePath = parameters.file;
-    final contextRoot = contextRootContaining(filePath);
-    if (contextRoot == null) {
-      // Return an error from the request.
-      throw new plugin.RequestFailure(plugin.RequestErrorFactory
-          .pluginError('Failed to analyze $filePath', null));
-    }
-    final AngularDriver driver = driverMap[contextRoot];
+    final driver = _getDriverForFile(filePath);
     final analysisResult = await driver.dartDriver.getResult(filePath);
     final contributor = new AngularCompletionContributor(driver);
     final performance = new CompletionPerformance();
@@ -149,5 +186,15 @@ class AngularAnalysisPlugin extends ServerPlugin {
     final suggestions = await contributor.computeSuggestions(dartRequest);
     return new plugin.CompletionGetSuggestionsResult(
         request.replacementOffset, request.replacementLength, suggestions);
+  }
+
+  AngularDriver _getDriverForFile(String file) {
+    final contextRoot = contextRootContaining(file);
+    if (contextRoot == null) {
+      // Return an error from the request.
+      throw new plugin.RequestFailure(plugin.RequestErrorFactory
+          .pluginError('Failed to analyze $file', null));
+    }
+    return driverMap[contextRoot];
   }
 }
